@@ -71,8 +71,9 @@ func TestWriteFileCreatesParentDirectory(t *testing.T) {
 	}
 }
 
-// TestWriteFileLeavesNoTempFiles removes staging files after a successful replacement.
-func TestWriteFileLeavesNoTempFiles(t *testing.T) {
+// TestWriteFileLeavesNoTemporaryFiles removes staging files after a
+// successful replacement.
+func TestWriteFileLeavesNoTemporaryFiles(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "target.txt")
 	if err := WriteFile(path, []byte("done"), 0o644); err != nil {
@@ -91,7 +92,8 @@ func TestWriteFileLeavesNoTempFiles(t *testing.T) {
 	}
 }
 
-// TestDurablePrivateWrite preserves private directories and file modes while syncing the rename.
+// TestDurablePrivateWrite preserves private directories and file modes while
+// syncing the rename.
 func TestDurablePrivateWrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "private", "state.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -106,25 +108,26 @@ func TestDurablePrivateWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	if parent.Mode().Perm() != 0o700 {
-		t.Fatalf("parent mode %v", parent.Mode())
+		t.Fatalf("parent mode = %v, want 0700", parent.Mode().Perm())
 	}
 	file, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if file.Mode().Perm() != 0o600 {
-		t.Fatalf("file mode %v", file.Mode())
+		t.Fatalf("file mode = %v, want 0600", file.Mode().Perm())
 	}
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(contents) != `{"revision":1}` {
-		t.Fatalf("unexpected contents %q", contents)
+		t.Fatalf("contents = %q, want %q", contents, `{"revision":1}`)
 	}
 }
 
-// TestFailedReplacementCleansStaging retains the target and removes staging files when rename fails.
+// TestFailedReplacementCleansStaging retains the target and removes staging
+// files when rename fails.
 func TestFailedReplacementCleansStaging(t *testing.T) {
 	directory := t.TempDir()
 	target := filepath.Join(directory, "target")
@@ -143,7 +146,8 @@ func TestFailedReplacementCleansStaging(t *testing.T) {
 	}
 }
 
-// TestConcurrentReplacementPublishesWholeFiles rejects torn reads while multiple writers replace the same path.
+// TestConcurrentReplacementPublishesWholeFiles rejects torn reads while
+// multiple writers replace the same path.
 func TestConcurrentReplacementPublishesWholeFiles(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state")
 	first := bytes.Repeat([]byte("a"), 65_536)
@@ -196,16 +200,27 @@ func TestSyncDirectory(t *testing.T) {
 	}
 }
 
-// TestWriteFileCreatesNestedDirectories writes under several missing
-// directories, all of which are created.
-func TestWriteFileCreatesNestedDirectories(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "a", "b", "c", "state.json")
+// TestWriteFileCreatesPrivateParents writes under several missing
+// directories, all of which are created with mode 0700, so a file written
+// with a private mode is not listed to other users.
+func TestWriteFileCreatesPrivateParents(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "a", "b", "c", "state.json")
 	if err := WriteFile(path, []byte("nested"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	contents, err := os.ReadFile(path)
 	if err != nil || string(contents) != "nested" {
-		t.Fatalf("contents %q, %v", contents, err)
+		t.Fatalf("contents = %q, %v, want %q", contents, err, "nested")
+	}
+	for _, created := range []string{"a", "a/b", "a/b/c"} {
+		directory, err := os.Stat(filepath.Join(root, created))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if directory.Mode().Perm() != 0o700 {
+			t.Errorf("%s mode = %v, want 0700", created, directory.Mode().Perm())
+		}
 	}
 }
 
@@ -216,9 +231,12 @@ func TestMkdirAll(t *testing.T) {
 	if err := MkdirAll(directory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(directory)
-	if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
-		t.Fatalf("directory %v, %v", info, err)
+	created, err := os.Stat(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created.IsDir() || created.Mode().Perm() != 0o700 {
+		t.Fatalf("directory mode = %v, want a directory with 0700", created.Mode())
 	}
 	if err := MkdirAll(directory, 0o700); err != nil {
 		t.Fatalf("an existing directory: %v", err)

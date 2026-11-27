@@ -34,8 +34,9 @@ var (
 // file, its directory, and every directory it created before returning.
 //
 // The file gets mode, regardless of the process umask. Missing parent
-// directories are created as MkdirAll creates them, with mode 0o755 (less the
-// umask); a caller that needs a private directory creates it first.
+// directories are created as MkdirAll creates them, with mode 0o700 (less the
+// umask), so only the owner can list them; a caller that needs a directory
+// others can read creates it first with MkdirAll and the mode it wants.
 //
 // An error that wraps ErrNotDurable came after the rename: the target holds
 // the new contents. Any other error leaves the target as it was and removes
@@ -49,7 +50,7 @@ func WriteFile(path string, contents []byte, mode os.FileMode) (failure error) {
 	}
 
 	directory := filepath.Dir(path)
-	if err := MkdirAll(directory, 0o755); err != nil {
+	if err := MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
 	temporaryFile, err := os.CreateTemp(directory, "."+filepath.Base(path)+".*")
@@ -105,12 +106,14 @@ func MkdirAll(directory string, mode os.FileMode) error {
 	}
 	var missing []string
 	for current := directory; ; current = filepath.Dir(current) {
-		if information, err := os.Stat(current); err == nil {
-			if !information.IsDir() {
+		existing, err := os.Stat(current)
+		if err == nil {
+			if !existing.IsDir() {
 				return &os.PathError{Op: "mkdir", Path: current, Err: syscall.ENOTDIR}
 			}
 			break
-		} else if !errors.Is(err, os.ErrNotExist) {
+		}
+		if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		missing = append(missing, current)
