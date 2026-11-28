@@ -30,4 +30,4 @@ if err := atomicfile.WriteFile("/var/lib/app/settings.json", contents, 0o600); e
   lost in a crash.
 - Unix-like systems only: on Windows it returns `ErrUnsupported` before changing anything.
 
-Tested on the two newest Go releases. Licensed under the MIT license.
+Requires Go 1.27. Licensed under the MIT license.
